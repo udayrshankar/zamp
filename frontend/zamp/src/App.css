@@ -33,7 +33,19 @@
 
 .nav nav {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 0 24px;
+}
+
+.nav-external {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-external .icon {
+  width: 14px;
+  height: 14px;
 }
 
 .nav nav a {
@@ -118,6 +130,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 44px;
   padding: 10px 22px;
   border: 1px solid transparent;
@@ -162,6 +175,12 @@
 .button-danger {
   background: var(--rejected-text);
   color: #ffffff;
+}
+
+.button-small {
+  min-height: 40px;
+  padding: 7px 16px;
+  font-size: 0.9rem;
 }
 
 .button-large {
@@ -255,6 +274,17 @@
 
 .hero .button {
   margin-top: 16px;
+}
+
+.hero-aside {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.hero-aside a {
+  color: var(--ink);
+  text-underline-offset: 3px;
 }
 
 .filters {
@@ -422,6 +452,94 @@
   color: var(--muted);
   font-size: 0.95rem;
   text-decoration: none;
+}
+
+/* Test invoices */
+.steps {
+  display: grid;
+  gap: 6px;
+  max-width: 70ch;
+  margin: 0 0 48px;
+  padding-left: 1.25rem;
+}
+
+.steps li::marker {
+  color: var(--muted);
+}
+
+.sample-group + .sample-group {
+  margin-top: 56px;
+}
+
+.sample-group h2 {
+  margin-bottom: 4px;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.samples {
+  margin: 16px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.sample {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sample-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sample-tests {
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.sample-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.sample-note {
+  color: var(--review-text);
+  font-size: 0.85rem;
+}
+
+.sample-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--muted);
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-link:hover {
+    background: var(--wash);
+    color: var(--ink);
+  }
 }
 
 /* Invoice */
@@ -1013,6 +1131,18 @@
 
   .row-date {
     margin-left: auto;
+  }
+
+  .sample {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .sample-text {
+    grid-column: 1 / -1;
+  }
+
+  .sample-actions {
+    justify-self: end;
   }
 
   .compare thead,

@@ -3,6 +3,7 @@ import { matchesFilter, sortByUrgency } from '../api/runs'
 import type { Run, RunFilter } from '../api/runs'
 import { useRuns } from '../hooks/useRuns'
 import { runSentence } from '../runSentence'
+import { SAMPLE_COUNT, SAMPLES_ZIP } from '../samples'
 import { FilePicker } from './FilePicker'
 import { StatusBadge } from './StatusBadge'
 
@@ -48,6 +49,13 @@ export function HomePage({ uploading, onFiles }: HomePageProps) {
         <FilePicker className="button button-solid button-large" disabled={uploading} onFiles={onFiles}>
           {uploading ? 'Uploading' : 'Choose a PDF'}
         </FilePicker>
+        <p className="hero-aside">
+          No invoice to hand? <a href="#/samples">Try one of {SAMPLE_COUNT} test invoices</a>, or{' '}
+          <a href={SAMPLES_ZIP} download>
+            download them all
+          </a>
+          .
+        </p>
       </section>
 
       {error && (

@@ -4,8 +4,11 @@ import { HomePage } from './components/HomePage'
 import { InvoicePage } from './components/InvoicePage'
 import { PurchaseOrderPage } from './components/PurchaseOrderPage'
 import { PurchaseOrdersPage } from './components/PurchaseOrdersPage'
+import { SamplesPage } from './components/SamplesPage'
+import { Icon } from './components/Icon'
 import { navigate, useHashRoute } from './hooks/useHashRoute'
 import { useInvoiceUpload } from './hooks/useInvoiceUpload'
+import { GITHUB_URL } from './samples'
 import './App.css'
 
 function App() {
@@ -45,6 +48,7 @@ function App() {
   }
 
   const onPurchaseOrders = section === 'purchase-orders'
+  const onSamples = section === 'samples'
 
   return (
     <div
@@ -73,11 +77,19 @@ function App() {
           PO Matcher
         </a>
         <nav aria-label="Main">
-          <a href="#/" aria-current={!onPurchaseOrders ? 'page' : undefined}>
+          <a href="#/" aria-current={!onPurchaseOrders && !onSamples ? 'page' : undefined}>
             Invoices
           </a>
           <a href="#/purchase-orders" aria-current={onPurchaseOrders ? 'page' : undefined}>
             Purchase orders
+          </a>
+          <a href="#/samples" aria-current={onSamples ? 'page' : undefined}>
+            Test invoices
+          </a>
+          <a className="nav-external" href={GITHUB_URL} target="_blank" rel="noreferrer">
+            GitHub
+            <Icon name="external" />
+            <span className="visually-hidden">(opens in a new tab)</span>
           </a>
         </nav>
       </header>
@@ -94,6 +106,8 @@ function App() {
           <PurchaseOrderPage id={id} />
         ) : onPurchaseOrders ? (
           <PurchaseOrdersPage />
+        ) : onSamples ? (
+          <SamplesPage uploading={uploading} onFiles={(files) => void upload(files)} />
         ) : (
           <HomePage uploading={uploading} onFiles={(files) => void upload(files)} />
         )}
