@@ -6,6 +6,7 @@ from typing import Protocol, Self, TypeVar
 
 from pydantic import BaseModel
 
+from app.domain.llm import ModelAnswer
 from app.domain.models import (
     Document,
     DocumentError,
@@ -170,6 +171,21 @@ class PurchaseOrderRepository(Protocol):
 class LlmClient(Protocol):
     async def complete_json(self, system: str, user: str, output: type[T]) -> T:
         """Returns the answer validated against `output`. Raises LlmError."""
+        ...
+
+
+class NamedLlmClient(LlmClient, Protocol):
+    """A client for one specific model."""
+
+    @property
+    def model(self) -> str:
+        ...
+
+
+class LlmPanel(Protocol):
+    async def ask_all(self, system: str, user: str, output: type[T]) -> list[ModelAnswer[T]]:
+        """Puts the same question to several models. Never raises: a model that
+        fails is reported as a failed answer."""
         ...
 
 

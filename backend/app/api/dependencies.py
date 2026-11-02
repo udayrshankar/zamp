@@ -10,6 +10,9 @@ from app.core.config import Settings
 from app.core.pipeline_factory import build_pipeline
 from app.infrastructure.gridfs_storage import GridFsStorage
 from app.infrastructure.mongo_repository import MongoDocumentRepository
+from app.infrastructure.llm_chain import FallbackLlmClient
+from app.infrastructure.llm_panel import ParallelLlmPanel
+from app.infrastructure.model_health import ModelHealth
 from app.infrastructure.nvidia_llm import NvidiaLlmClient
 from app.infrastructure.purchase_order_repository import MongoPurchaseOrderRepository
 from app.infrastructure.run_repository import MongoRunRepository
@@ -30,6 +33,7 @@ class Container:
     startup: Callable[[], Awaitable[None]]
     shutdown: Callable[[], Awaitable[None]]
     run_orchestrator: RunOrchestrator | None = None
+    model_health: ModelHealth | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -53,13 +57,21 @@ def build_container(settings: Settings) -> Container:
     purchase_order_service = PurchaseOrderService(purchase_orders)
     runs = MongoRunRepository(database)
     llm_http = httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS)
-    llm = NvidiaLlmClient(llm_http, settings.LLM_URL, settings.NVIDIA_KEY, settings.LLM_MODEL)
+    models = [
+        NvidiaLlmClient(llm_http, settings.LLM_URL, settings.NVIDIA_KEY, model)
+        for model in settings.LLM_MODELS
+    ]
+    health = ModelHealth(settings.LLM_MODELS, cooldown_seconds=settings.LLM_COOLDOWN_SECONDS)
     orchestrator = RunOrchestrator(
         runs=runs,
         documents=service,
         purchase_orders=purchase_order_service,
-        detector=PoDetector(llm),
-        verifier=InvoiceVerifier(llm),
+        detector=PoDetector(FallbackLlmClient(models, health)),
+        verifier=InvoiceVerifier(
+            ParallelLlmPanel(
+                models, health, settings.LLM_PANEL_SIZE, settings.LLM_PANEL_DEADLINE_SECONDS
+            )
+        ),
         checks=build_checks(
             Tolerance(settings.ACCEPT_TOLERANCE_PERCENT, settings.REJECT_TOLERANCE_PERCENT)
         ),
@@ -81,6 +93,7 @@ def build_container(settings: Settings) -> Container:
         document_service=service,
         purchase_order_service=purchase_order_service,
         run_orchestrator=orchestrator,
+        model_health=health,
         startup=startup,
         shutdown=shutdown,
     )
@@ -92,6 +105,11 @@ def get_document_service(request: Request) -> DocumentService:
 
 def get_purchase_order_service(request: Request) -> PurchaseOrderService:
     return request.app.state.container.purchase_order_service
+
+
+def get_model_health(request: Request) -> ModelHealth | None:
+    container = getattr(request.app.state, "container", None)
+    return container.model_health if container else None
 
 
 def get_run_orchestrator(request: Request) -> RunOrchestrator:

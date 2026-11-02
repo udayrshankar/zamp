@@ -70,3 +70,20 @@ def _result(matches: list[PurchaseOrder]) -> PoMatch:
     if len(matches) == 1:
         return PoMatch(order=matches[0], ambiguous=[])
     return PoMatch(order=None, ambiguous=matches)
+
+
+def find_in_text(text: str, orders: list[PurchaseOrder]) -> list[PurchaseOrder]:
+    """Every PO on file whose number is printed in the text, however it's
+    punctuated or spaced. Most invoices quote their PO in full, so this finds
+    it without asking an LLM."""
+    return _unique(order for order in orders if _printed_number(order.po_number).search(text))
+
+
+def _printed_number(po_number: str) -> re.Pattern[str]:
+    """Matches the PO number's letters and digits in order, with any separators
+    between them, but not as part of a longer code or number."""
+    characters = [re.escape(char) for char in po_number if char.isalnum()]
+    return re.compile(
+        r"(?<![A-Za-z0-9])" + r"[\s/._-]*".join(characters) + r"(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )

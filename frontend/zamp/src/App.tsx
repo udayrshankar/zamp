@@ -6,6 +6,7 @@ import { PurchaseOrderPage } from './components/PurchaseOrderPage'
 import { PurchaseOrdersPage } from './components/PurchaseOrdersPage'
 import { SamplesPage } from './components/SamplesPage'
 import { Icon } from './components/Icon'
+import { ModelHealthBadge } from './components/ModelHealthBadge'
 import { navigate, useHashRoute } from './hooks/useHashRoute'
 import { useInvoiceUpload } from './hooks/useInvoiceUpload'
 import { GITHUB_URL } from './samples'
@@ -76,6 +77,7 @@ function App() {
           </svg>
           PO Matcher
         </a>
+        <ModelHealthBadge />
         <nav aria-label="Main">
           <a href="#/" aria-current={!onPurchaseOrders && !onSamples ? 'page' : undefined}>
             Invoices

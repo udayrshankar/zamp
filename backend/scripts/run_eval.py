@@ -17,6 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.config import Settings, settings  # noqa: E402
 from app.core.pipeline_factory import build_pipeline  # noqa: E402
 from app.domain.models import PurchaseOrderData  # noqa: E402
+from app.infrastructure.llm_chain import FallbackLlmClient  # noqa: E402
+from app.infrastructure.llm_panel import ParallelLlmPanel  # noqa: E402
+from app.infrastructure.model_health import ModelHealth  # noqa: E402
 from app.infrastructure.nvidia_llm import NvidiaLlmClient  # noqa: E402
 from app.services.document_service import DocumentService  # noqa: E402
 from app.services.purchase_order_service import PurchaseOrderService  # noqa: E402
@@ -42,9 +45,11 @@ async def run_once(verbose: bool) -> tuple[int, int]:
     correct = wrong_accepts = 0
     with ThreadPoolExecutor(max_workers=1) as executor:
         async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as http:
-            llm = NvidiaLlmClient(
-                http, settings.LLM_URL, settings.NVIDIA_KEY, settings.LLM_MODEL
-            )
+            models = [
+                NvidiaLlmClient(http, settings.LLM_URL, settings.NVIDIA_KEY, model)
+                for model in settings.LLM_MODELS
+            ]
+            health = ModelHealth(settings.LLM_MODELS, cooldown_seconds=settings.LLM_COOLDOWN_SECONDS)
             orchestrator = RunOrchestrator(
                 runs=FakeRunRepository(),
                 documents=DocumentService(
@@ -55,8 +60,12 @@ async def run_once(verbose: bool) -> tuple[int, int]:
                     max_upload_bytes=settings.MAX_UPLOAD_MB * 1024 * 1024,
                 ),
                 purchase_orders=orders,
-                detector=PoDetector(llm),
-                verifier=InvoiceVerifier(llm),
+                detector=PoDetector(FallbackLlmClient(models, health)),
+                verifier=InvoiceVerifier(
+                    ParallelLlmPanel(
+                        models, health, settings.LLM_PANEL_SIZE, settings.LLM_PANEL_DEADLINE_SECONDS
+                    )
+                ),
                 checks=build_checks(
                     Tolerance(
                         settings.ACCEPT_TOLERANCE_PERCENT, settings.REJECT_TOLERANCE_PERCENT
@@ -98,7 +107,7 @@ async def main() -> int:
     parser.add_argument("--quiet", action="store_true", help="hide the reasons for wrong answers")
     args = parser.parse_args()
 
-    print(f"Model: {settings.LLM_MODEL}")
+    print(f"Models: {', '.join(settings.LLM_MODELS)} (panel of {settings.LLM_PANEL_SIZE})")
     total_wrong_accepts = 0
     for attempt in range(args.repeat):
         correct, wrong_accepts = await run_once(not args.quiet)

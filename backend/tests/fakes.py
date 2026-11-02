@@ -272,3 +272,23 @@ class FakeLlm:
         if isinstance(answer, Exception):
             raise answer
         return answer
+
+
+class FakePanel:
+    """A panel of one: puts each question to a FakeLlm and reports its answer,
+    or its error, the way a real panel would."""
+
+    MODEL = "fake-model"
+
+    def __init__(self, llm: FakeLlm) -> None:
+        self.llm = llm
+
+    async def ask_all(self, system: str, user: str, output: type) -> list:
+        from app.domain.errors import LlmError
+        from app.domain.llm import AnswerStatus, ModelAnswer
+
+        try:
+            answer = await self.llm.complete_json(system, user, output)
+        except LlmError as error:
+            return [ModelAnswer(self.MODEL, AnswerStatus.FAILED, 0.0, error=error.message)]
+        return [ModelAnswer(self.MODEL, AnswerStatus.ANSWERED, 0.0, output=answer)]

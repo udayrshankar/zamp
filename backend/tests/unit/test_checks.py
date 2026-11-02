@@ -11,7 +11,6 @@ from app.domain.runs import (
     CheckResult,
     Charge,
     Decision,
-    Discrepancy,
     InvoiceFacts,
     LineItem,
     PoFacts,
@@ -26,7 +25,6 @@ from app.workflow.checks import (
     ExtractionQualityCheck,
     PoAmountCheck,
     ReadingAccuracyCheck,
-    ReportedDiscrepancyCheck,
     RequiredFieldsCheck,
     Tolerance,
     VendorCheck,
@@ -384,98 +382,6 @@ class TestExtractionQuality:
         doc = document([ExtractionWarning(code=WarningCode.BLANK_PAGE, message="x")])
 
         assert ExtractionQualityCheck().run(context(doc=doc)).outcome is CheckOutcome.PASS
-
-
-class TestReportedDiscrepancies:
-    ITEMISED = PurchaseOrder(
-        po_number="PO-2",
-        fields={
-            "line_items": [
-                {"description": "Chair", "qty": 2},
-                {"description": "Desk", "qty": 1},
-            ]
-        },
-    )
-
-    def test_a_line_the_llm_missed_is_still_caught(self):
-        extra = LineItem(description="Gaming headset", quantity=1, unit_price=9, amount=9)
-        facts = invoice(line_items=[*invoice().line_items, extra])
-
-        result = ReportedDiscrepancyCheck().run(
-            context(verification(facts), order=self.ITEMISED)
-        )
-
-        assert result.outcome is CheckOutcome.REVIEW
-        assert "Gaming headset" in result.message
-
-    def test_a_period_on_a_line_still_matches_the_po_line(self):
-        order = PurchaseOrder(
-            po_number="PO-4",
-            fields={"line_items": [{"description": "Housekeeping Services, Academic Zone"}]},
-        )
-        line = LineItem(
-            description="Housekeeping Services, Academic Zone, October 2026",
-            quantity=1,
-            unit_price=9,
-            amount=9,
-        )
-
-        result = ReportedDiscrepancyCheck().run(
-            context(verification(invoice(line_items=[line])), order=order)
-        )
-
-        assert result.outcome is CheckOutcome.PASS
-
-    def result(self, evidence: str, order: PurchaseOrder) -> CheckResult:
-        found = Discrepancy(
-            kind="item_not_on_po",
-            description="Item not on the PO.",
-            evidence=evidence,
-            invoice_value=None,
-            po_value=None,
-        )
-        return ReportedDiscrepancyCheck().run(
-            context(verification(discrepancies=[found]), order=order)
-        )
-
-    def test_a_backed_up_discrepancy_needs_review(self):
-        result = self.result("Subtotal 900.00", self.ITEMISED)
-
-        assert result.outcome is CheckOutcome.REVIEW
-        assert result.message == "Item not on the PO."
-
-    @pytest.mark.parametrize(
-        ("kind", "invoice_value", "po_value", "outcome"),
-        [
-            ("price_differs", 145000.0, 145000.0, CheckOutcome.PASS),
-            ("price_differs", 150000.0, 145000.0, CheckOutcome.REVIEW),
-            ("quantity_over_po", 1.0, 6.0, CheckOutcome.PASS),
-            ("quantity_over_po", 8.0, 6.0, CheckOutcome.REVIEW),
-            ("price_differs", None, 145000.0, CheckOutcome.PASS),
-        ],
-    )
-    def test_claimed_differences_are_confirmed_by_code(
-        self, kind, invoice_value, po_value, outcome
-    ):
-        found = Discrepancy(
-            kind=kind,
-            description="Conflict.",
-            evidence="Subtotal 900.00",
-            invoice_value=invoice_value,
-            po_value=po_value,
-        )
-
-        result = ReportedDiscrepancyCheck().run(
-            context(verification(discrepancies=[found]), order=self.ITEMISED)
-        )
-
-        assert result.outcome is outcome
-
-    def test_a_po_with_only_a_total_cannot_have_a_line_conflict(self):
-        assert self.result("Subtotal 900.00", ORDER).outcome is CheckOutcome.PASS
-
-    def test_evidence_that_is_not_on_the_invoice_is_ignored(self):
-        assert self.result("Gaming headset 200.00", self.ITEMISED).outcome is CheckOutcome.PASS
 
 
 def check(outcome: CheckOutcome, message: str = "m") -> CheckResult:

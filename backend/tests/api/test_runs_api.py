@@ -15,24 +15,25 @@ from app.workflow.checks import Tolerance, build_checks
 from app.workflow.invoice_verifier import InvoiceVerifier
 from app.workflow.po_detector import PoDetector
 from tests.fakes import (
+    FakePanel,
     FakeLlm,
     FakePurchaseOrderRepository,
     FakeRepository,
     FakeRunRepository,
     FakeStorage,
 )
-from tests.unit.test_run_orchestrator import TextExtractor, detected, verified
+from tests.unit.test_run_orchestrator import UNREFERENCED, TextExtractor, verified
 
 URL = "/api/v1/runs"
 PDF = b"%PDF-1.7 content"
 
 
-def build_client(llm: FakeLlm):
+def build_client(llm: FakeLlm, extractor: TextExtractor | None = None):
     executor = ThreadPoolExecutor(max_workers=1)
     documents = DocumentService(
         repository=FakeRepository(),
         storage=FakeStorage(),
-        extractor=TextExtractor(),
+        extractor=extractor or TextExtractor(),
         executor=executor,
         max_upload_bytes=1024 * 1024,
     )
@@ -42,7 +43,7 @@ def build_client(llm: FakeLlm):
         documents=documents,
         purchase_orders=orders,
         detector=PoDetector(llm),
-        verifier=InvoiceVerifier(llm),
+        verifier=InvoiceVerifier(FakePanel(llm)),
         checks=build_checks(Tolerance(2, 10)),
     )
 
@@ -64,14 +65,15 @@ def build_client(llm: FakeLlm):
 
 @pytest.fixture
 def client():
-    with build_client(FakeLlm(detected("PO-1"), verified())) as test_client:
+    # The invoice prints its PO, so it is matched without asking the LLM.
+    with build_client(FakeLlm(verified())) as test_client:
         yield test_client
 
 
 @pytest.fixture
 def paused_client():
     llm = FakeLlm(PoDetectionOutput(candidates=[]), verified())
-    with build_client(llm) as test_client:
+    with build_client(llm, TextExtractor(text=UNREFERENCED)) as test_client:
         yield test_client
 
 

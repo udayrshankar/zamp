@@ -57,8 +57,21 @@ class Settings(BaseSettings):
 
     # The LLM that detects PO references and compares documents
     LLM_URL: str = "https://integrate.api.nvidia.com/v1/chat/completions"
-    LLM_MODEL: str = "nvidia/nemotron-3.5-bolt-e4b"
-    LLM_TIMEOUT_SECONDS: float = 45
+    # Tried in this order. The first LLM_PANEL_SIZE healthy ones verify each
+    # invoice together; the rest stand in when one fails.
+    LLM_MODELS: list[str] = [
+        "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "nvidia/nemotron-3.5-bolt-e4b",
+        "mistralai/mistral-large-4-1t-a52b",
+    ]
+    LLM_PANEL_SIZE: int = 3
+    LLM_TIMEOUT_SECONDS: float = 30
+    # No model replaces a failed one after this long; the panel uses what it has.
+    LLM_PANEL_DEADLINE_SECONDS: float = 45
+    # A model that fails twice in a row is skipped for this long.
+    LLM_COOLDOWN_SECONDS: float = 300
 
     # How far billing may run over a PO: up to ACCEPT is accepted, up to REJECT
     # goes to review, and beyond that is rejected.

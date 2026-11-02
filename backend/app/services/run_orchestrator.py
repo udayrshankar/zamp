@@ -14,6 +14,7 @@ from app.domain.models import Document, DocumentStatus, PurchaseOrder, WarningCo
 from app.domain.ports import RunRepository
 from app.domain.runs import (
     Decision,
+    ModelVote,
     PoSource,
     Run,
     RunError,
@@ -24,15 +25,18 @@ from app.domain.runs import (
 from app.services.document_service import DocumentService
 from app.services.purchase_order_service import PurchaseOrderService
 from app.workflow.checks import Check, CheckContext
+from app.workflow.consensus import choose
 from app.workflow.decision_policy import decide
 from app.workflow.invoice_verifier import InvoiceVerifier
+from app.workflow.model_votes import predict
 from app.workflow.po_detector import PoDetector
-from app.workflow.po_matcher import find_by_number, match_purchase_order
+from app.workflow.po_matcher import find_by_number, find_in_text, match_purchase_order
 
 logger = logging.getLogger(__name__)
 
 NO_REFERENCE_PROMPT = "No purchase order reference was found on this invoice."
 UNREADABLE_PROMPT = "The purchase order could not be detected automatically."
+NO_MODEL_REASON = "No AI model could read the invoice, so a person needs to check it."
 
 
 class RunOrchestrator:
@@ -193,6 +197,11 @@ class RunOrchestrator:
         run.begin_stage(StageName.PO_DETECTION)
         await self._save(run)
 
+        orders = await self._purchase_orders.all()
+        printed = find_in_text(text, orders)
+        if len(printed) == 1:
+            return await self._matched(run, printed[0], {"method": "po_number_in_text"})
+
         try:
             candidates = await self._detector.detect(text)
         except LlmError as error:
@@ -201,26 +210,16 @@ class RunOrchestrator:
             return None
 
         found = [candidate.value for candidate in candidates]
-        match = match_purchase_order(candidates, await self._purchase_orders.all())
+        match = match_purchase_order(candidates, orders)
         detail = {
+            "method": "llm",
             "candidates": [
                 {"value": candidate.value, "evidence": candidate.evidence}
                 for candidate in candidates
-            ]
+            ],
         }
         if match.order is not None:
-            self._assign_order(run, match.order, PoSource.DETECTED)
-            run.end_stage(
-                StageName.PO_DETECTION,
-                StageStatus.COMPLETED,
-                f"Matched {match.order.po_number}.",
-                detail,
-            )
-            run.end_stage(
-                StageName.PO_CONFIRMATION, StageStatus.SKIPPED, "No confirmation was needed."
-            )
-            await self._save(run)
-            return match.order
+            return await self._matched(run, match.order, detail)
 
         if match.ambiguous:
             numbers = [order.po_number for order in match.ambiguous]
@@ -234,6 +233,15 @@ class RunOrchestrator:
         run.end_stage(StageName.PO_DETECTION, StageStatus.COMPLETED, prompt, detail)
         await self._pause(run, prompt, numbers)
         return None
+
+    async def _matched(self, run: Run, order: PurchaseOrder, detail: dict) -> PurchaseOrder:
+        self._assign_order(run, order, PoSource.DETECTED)
+        run.end_stage(
+            StageName.PO_DETECTION, StageStatus.COMPLETED, f"Matched {order.po_number}.", detail
+        )
+        run.end_stage(StageName.PO_CONFIRMATION, StageStatus.SKIPPED, "No confirmation was needed.")
+        await self._save(run)
+        return order
 
     async def _pause(self, run: Run, prompt: str, suggestions: list[str]) -> None:
         run.begin_stage(StageName.PO_CONFIRMATION)
@@ -250,15 +258,22 @@ class RunOrchestrator:
         run.begin_stage(StageName.VERIFICATION)
         await self._save(run)
 
-        try:
-            run.verification = await self._verifier.verify(text, order)
-        except LlmError as error:
-            await self._conclude_early(run, StageName.VERIFICATION, error.message)
+        answers = await self._verifier.verify(text, order)
+        consensus = choose(answers, text, order.po_number)
+        if consensus is None:
+            run.model_votes = [
+                ModelVote(model=a.model, status="failed", seconds=a.seconds, error=a.error)
+                for a in answers
+            ]
+            await self._conclude_early(run, StageName.VERIFICATION, NO_MODEL_REASON)
             return
+        run.verification = consensus.chosen.output
+        answered = len(consensus.readings)
         run.end_stage(
             StageName.VERIFICATION,
             StageStatus.COMPLETED,
-            f"Compared the invoice with {order.po_number}.",
+            f"Compared the invoice with {order.po_number}. {answered} of {len(answers)} "
+            f"model(s) answered; using {consensus.chosen.model}'s reading.",
         )
 
         run.begin_stage(StageName.CHECKS)
@@ -271,8 +286,10 @@ class RunOrchestrator:
             earlier_runs=[
                 earlier for earlier in await self._runs.list_decided() if earlier.id != run.id
             ],
+            readings_agree=consensus.readings_agree,
         )
         run.checks = [check.run(context) for check in self._checks]
+        run.model_votes = predict(answers, consensus, context, self._checks)
         failed = sum(check.outcome != "pass" for check in run.checks)
         run.end_stage(
             StageName.CHECKS,

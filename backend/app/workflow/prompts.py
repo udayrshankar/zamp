@@ -27,7 +27,9 @@ null for anything that is not stated.
 
 invoice:
 - line_items: every row of the item table, one entry per row, in order. Never
-  stop after the first row. amount is the row's total as printed.
+  stop after the first row. amount is the row's total as printed. unit_price
+  is the rate as printed; discount_percent is the row's discount, or null if
+  the row has none.
 - subtotal: the amount before tax and charges, as printed.
 - tax: a single tax line's amount. If tax is split across lines, such as CGST
   and SGST, use null here and list each one under charges. Also use null if

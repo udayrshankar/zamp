@@ -10,11 +10,20 @@ T = TypeVar("T", bound=BaseModel)
 
 MAX_OUTPUT_TOKENS = 4000
 COMPLETE = "stop"
-ATTEMPTS = 3
+CUT_SHORT = "length"
+ATTEMPTS = 2
+
+
+class _CutShort(LlmError):
+    """The answer hit the token limit, so a retry gets a bigger budget."""
+
+
+class _TimedOut(LlmError):
+    """Not retried: a model this slow is better replaced by the next one."""
 
 
 class NvidiaLlmClient:
-    """Chat completions with schema-constrained JSON output."""
+    """Chat completions from one model, with schema-constrained JSON output."""
 
     def __init__(
         self,
@@ -30,18 +39,28 @@ class NvidiaLlmClient:
         self._model = model
         self._retry_delay_seconds = retry_delay_seconds
 
+    @property
+    def model(self) -> str:
+        return self._model
+
     async def complete_json(self, system: str, user: str, output: type[T]) -> T:
         failure = LlmError("The LLM was not called.")
+        budget = MAX_OUTPUT_TOKENS
         for attempt in range(ATTEMPTS):
             if attempt:
                 await asyncio.sleep(self._retry_delay_seconds * attempt)
             try:
-                return await self._attempt(system, user, output)
+                return await self._attempt(system, user, output, budget)
+            except _TimedOut:
+                raise
+            except _CutShort as error:
+                failure = error
+                budget *= 2
             except LlmError as error:
                 failure = error
         raise failure
 
-    async def _attempt(self, system: str, user: str, output: type[T]) -> T:
+    async def _attempt(self, system: str, user: str, output: type[T], budget: int) -> T:
         try:
             response = await self._client.post(
                 self._url,
@@ -53,7 +72,9 @@ class NvidiaLlmClient:
                         {"role": "user", "content": user},
                     ],
                     "temperature": 0,
-                    "max_tokens": MAX_OUTPUT_TOKENS,
+                    "max_tokens": budget,
+                    # Reasoning models otherwise spend the whole budget thinking.
+                    "chat_template_kwargs": {"enable_thinking": False},
                     "response_format": {
                         "type": "json_schema",
                         "json_schema": {
@@ -65,7 +86,7 @@ class NvidiaLlmClient:
                 },
             )
         except httpx.TimeoutException as error:
-            raise LlmError("The LLM timed out.") from error
+            raise _TimedOut("The LLM timed out.") from error
         except httpx.HTTPError as error:
             raise LlmError("The LLM could not be reached.") from error
 
@@ -77,8 +98,10 @@ class NvidiaLlmClient:
         except (ValueError, KeyError, IndexError, TypeError) as error:
             raise LlmError("The LLM returned an unexpected response.") from error
 
-        if finish_reason != COMPLETE:
-            raise LlmError("The LLM stopped before finishing its answer.")
+        if finish_reason == CUT_SHORT:
+            raise _CutShort("The LLM stopped before finishing its answer.")
+        if finish_reason != COMPLETE or content is None:
+            raise LlmError("The LLM returned no answer.")
         try:
             return output.model_validate_json(content)
         except ValidationError as error:

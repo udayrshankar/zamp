@@ -2,6 +2,7 @@ import type { CheckResult, Run } from '../api/runs'
 import { formatAmount } from '../format'
 import { DocumentDetail } from './DocumentDetail'
 import { Icon } from './Icon'
+import { ModelPanel } from './ModelPanel'
 import { StageTimeline } from './StageTimeline'
 
 const CHECK_LABELS: Record<string, string> = {
@@ -14,6 +15,12 @@ const CHECK_LABELS: Record<string, string> = {
   po_amount: 'Amount against PO',
   extraction_quality: 'Document quality',
   reported_discrepancies: 'Line items',
+  po_lines: 'Line items',
+  line_arithmetic: 'Line arithmetic',
+  tax_rate: 'Tax rate',
+  invoice_date: 'Invoice date',
+  bank_details: 'Bank details',
+  reading_agreement: 'Model agreement',
 }
 
 const OUTCOME_LABELS: Record<CheckResult['outcome'], string> = {
@@ -100,6 +107,7 @@ export function RunWhy({ run }: { run: Run }) {
       </summary>
       <div className="why-body">
         <Checks checks={run.checks} />
+        <ModelPanel votes={run.model_votes} />
         <LineItems run={run} />
         <section>
           <h3>What happened</h3>

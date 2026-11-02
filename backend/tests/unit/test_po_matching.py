@@ -11,8 +11,8 @@ from app.domain.runs import (
 )
 from app.workflow.invoice_verifier import InvoiceVerifier
 from app.workflow.po_detector import PoDetector
-from app.workflow.po_matcher import find_by_number, match_purchase_order
-from tests.fakes import FakeLlm
+from app.workflow.po_matcher import find_by_number, find_in_text, match_purchase_order
+from tests.fakes import FakeLlm, FakePanel
 
 ORDERS = [
     PurchaseOrder(po_number="PO-88213"),
@@ -93,6 +93,15 @@ class TestDetector:
         llm = FakeLlm(PoDetectionOutput(candidates=list(candidates)))
         return await PoDetector(llm).detect(self.TEXT)
 
+    async def test_the_invoice_reaches_the_llm_marked_as_untrusted(self):
+        llm = FakeLlm(PoDetectionOutput(candidates=[]))
+
+        await PoDetector(llm).detect(self.TEXT)
+
+        [(system, user, _)] = llm.calls
+        assert "untrusted" in system
+        assert "<invoice>" in user
+
     async def test_keeps_a_reference_found_in_the_text(self):
         found = PoCandidate(value="88213/ACME", evidence="Your ref 88213/ACME dated 2 Oct")
 
@@ -149,7 +158,7 @@ class TestVerifierRowRetry:
     async def test_asks_again_when_rows_are_missing(self):
         llm = FakeLlm(self.answer(1), self.answer(2))
 
-        output = await InvoiceVerifier(llm).verify(self.TEXT, ORDERS[0])
+        output = (await InvoiceVerifier(FakePanel(llm)).verify(self.TEXT, ORDERS[0]))[0].output
 
         assert len(output.invoice.line_items) == 2
         assert "has 2 rows" in llm.calls[1][1]
@@ -157,13 +166,46 @@ class TestVerifierRowRetry:
     async def test_a_complete_answer_is_not_questioned(self):
         llm = FakeLlm(self.answer(2))
 
-        await InvoiceVerifier(llm).verify(self.TEXT, ORDERS[0])
+        await InvoiceVerifier(FakePanel(llm)).verify(self.TEXT, ORDERS[0])
 
         assert len(llm.calls) == 1
 
     async def test_keeps_the_first_answer_if_the_retry_is_no_better(self):
         llm = FakeLlm(self.answer(1), self.answer(1))
 
-        output = await InvoiceVerifier(llm).verify(self.TEXT, ORDERS[0])
+        output = (await InvoiceVerifier(FakePanel(llm)).verify(self.TEXT, ORDERS[0]))[0].output
 
         assert len(output.invoice.line_items) == 1
+
+
+class TestFindInText:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "PO No: IITM/PUR/2026-27/0417",
+            "Buyer's Order No. & Date: IITM/PUR/2026-27/0417 dt. 03.10.2026",
+            "P.O. ref iitm pur 2026 27 0417.",
+        ],
+    )
+    def test_finds_a_printed_po_however_it_is_punctuated(self, text):
+        order = PurchaseOrder(po_number="IITM/PUR/2026-27/0417", fields={})
+
+        assert find_in_text(text, [order]) == [order]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Quotation Q/4500018299",
+            "Total 141,001.00",
+            "Order IITM/PUR/2026-27/04170",
+            "Your Order: PUR/2026-27/0417",
+        ],
+    )
+    def test_ignores_lookalike_and_partial_numbers(self, text):
+        orders = [
+            PurchaseOrder(po_number="4500018231", fields={}),
+            PurchaseOrder(po_number="PO-41001", fields={}),
+            PurchaseOrder(po_number="IITM/PUR/2026-27/0417", fields={}),
+        ]
+
+        assert find_in_text(text, orders) == []

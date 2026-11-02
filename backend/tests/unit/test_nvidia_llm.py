@@ -75,7 +75,7 @@ async def test_bad_answers_raise_after_retrying(response):
     with pytest.raises(LlmError):
         await ask(client_with(handler))
 
-    assert len(calls) == 3
+    assert len(calls) == 2
 
 
 @pytest.mark.parametrize("failure", [httpx.ReadTimeout("slow"), httpx.ConnectError("down")])
@@ -92,3 +92,50 @@ async def test_errors_never_contain_the_api_key():
         await ask(client_with(lambda _: httpx.Response(403)))
 
     assert "secret-key" not in str(failure.value)
+
+
+async def test_reasoning_is_switched_off():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return reply()
+
+    await ask(client_with(handler))
+
+    assert seen["body"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+async def test_an_answer_cut_short_is_retried_with_a_bigger_budget():
+    budgets = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        budgets.append(json.loads(request.content)["max_tokens"])
+        return reply(finish_reason="length") if len(budgets) == 1 else reply()
+
+    answer = await ask(client_with(handler))
+
+    assert len(answer.candidates) == 1
+    assert budgets[1] == 2 * budgets[0]
+
+
+async def test_an_empty_answer_raises_llm_error():
+    with pytest.raises(LlmError):
+        await ask(client_with(lambda _: reply(content=None)))
+
+
+def test_reports_its_model():
+    assert client_with(lambda _: reply()).model == "test-model"
+
+
+async def test_a_timeout_is_not_retried_because_another_model_is_quicker():
+    calls = []
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        raise httpx.ReadTimeout("slow")
+
+    with pytest.raises(LlmError):
+        await ask(client_with(handler))
+
+    assert len(calls) == 1

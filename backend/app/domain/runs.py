@@ -83,6 +83,8 @@ class LineItem(LlmOutput):
     description: str
     quantity: float | None
     unit_price: float | None
+    # Optional so runs saved before discounts were read still load.
+    discount_percent: float | None = None
     amount: float | None
 
 
@@ -145,6 +147,22 @@ class Stage(BaseModel):
     finished_at: datetime | None = None
 
 
+class ModelVote(BaseModel):
+    """What one model read, and what the rules would decide from its reading
+    alone. Shown beside the final decision; it never changes it."""
+
+    model: str
+    status: Literal["answered", "failed"]
+    seconds: float
+    chosen: bool = False
+    decision: Decision | None = None
+    reasons: list[str] = Field(default_factory=list)
+    invoice_number: str | None = None
+    total: float | None = None
+    vendor_match: Literal["yes", "no", "unclear"] | None = None
+    error: str | None = None
+
+
 class RunError(BaseModel):
     code: str
     message: str
@@ -175,6 +193,7 @@ class Run(BaseModel):
     po_source: PoSource | None = None
     verification: VerificationOutput | None = None
     checks: list[CheckResult] = Field(default_factory=list)
+    model_votes: list[ModelVote] = Field(default_factory=list)
     decision: Decision | None = None
     reasons: list[str] = Field(default_factory=list)
     error: RunError | None = None

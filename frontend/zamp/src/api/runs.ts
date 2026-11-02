@@ -31,6 +31,7 @@ export interface LineItem {
   description: string
   quantity: number | null
   unit_price: number | null
+  discount_percent?: number | null
   amount: number | null
 }
 
@@ -53,6 +54,20 @@ export interface PoFacts {
   currency: string | null
 }
 
+/** What one AI model read, and what the rules would decide from its reading alone. */
+export interface ModelVote {
+  model: string
+  status: 'answered' | 'failed'
+  seconds: number
+  chosen: boolean
+  decision: Decision | null
+  reasons: string[]
+  invoice_number: string | null
+  total: number | null
+  vendor_match: 'yes' | 'no' | 'unclear' | null
+  error: string | null
+}
+
 export interface Run {
   id: string
   document_id: string
@@ -65,6 +80,7 @@ export interface Run {
   po_source: 'detected' | 'user_supplied' | null
   verification: { invoice: InvoiceFacts; purchase_order: PoFacts } | null
   checks: CheckResult[]
+  model_votes?: ModelVote[]
   decision: Decision | null
   reasons: string[]
   created_at: string

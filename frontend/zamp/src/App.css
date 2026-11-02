@@ -37,6 +37,44 @@
   gap: 0 24px;
 }
 
+.model-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: help;
+}
+
+.model-health-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accepted-text);
+}
+
+.model-health-degraded .model-health-dot {
+  background: var(--review-text);
+}
+
+.model-health-down .model-health-dot {
+  background: var(--rejected-text);
+}
+
+.vote-used {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
 .nav-external {
   display: inline-flex;
   align-items: center;
