@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+    restart: unless-stopped
+
+  web:
+    build: ./frontend/zamp
+    ports:
+      - "80:80"
+    volumes:
+      # The labelled test invoices, served for testers to download.
+      - ./backend/tests/fixtures/iitm:/usr/share/nginx/samples:ro
+    depends_on:
+      - backend
+    restart: unless-stopped

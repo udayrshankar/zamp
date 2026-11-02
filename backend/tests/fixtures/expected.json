@@ -1,0 +1,66 @@
+{
+  "native": {
+    "methods": [
+      "native"
+    ],
+    "contains": [
+      "INV-2041",
+      "12 Oct 2026",
+      "PO-88213",
+      "1,180.00"
+    ]
+  },
+  "scanned": {
+    "methods": [
+      "ocr"
+    ],
+    "contains": [
+      "INV-2041",
+      "12 Oct 2026",
+      "PO-88213",
+      "1,180.00"
+    ]
+  },
+  "mixed": {
+    "methods": [
+      "native",
+      "ocr"
+    ],
+    "contains": [
+      "INV-2041",
+      "12 Oct 2026",
+      "PO-88213",
+      "1,180.00",
+      "Delivery note DN-5519"
+    ]
+  },
+  "garbled": {
+    "methods": [
+      "ocr"
+    ],
+    "contains": [
+      "INV-2041",
+      "12 Oct 2026",
+      "PO-88213",
+      "1,180.00"
+    ]
+  },
+  "blank": {
+    "methods": [
+      "blank"
+    ],
+    "contains": []
+  },
+  "blank_scan": {
+    "methods": [
+      "blank"
+    ],
+    "contains": []
+  },
+  "encrypted": {
+    "error": "ENCRYPTED_PDF"
+  },
+  "corrupt": {
+    "error": "CORRUPT_PDF"
+  }
+}
