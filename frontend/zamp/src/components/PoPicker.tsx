@@ -5,6 +5,7 @@ import { declinePurchaseOrder, providePurchaseOrder } from '../api/runs'
 import type { Run } from '../api/runs'
 import { usePolling } from '../hooks/usePolling'
 import { matchPoNumbers, poSubtitle } from '../poSearch'
+import posthog, { isPostHogEnabled } from '../posthog'
 
 interface PoPickerProps {
   run: Run
@@ -36,7 +37,13 @@ export function PoPicker({ run, onAnswered }: PoPickerProps) {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     const poNumber = matches.length === 1 ? matches[0].po_number : typed.trim()
-    if (poNumber) void send(() => providePurchaseOrder(run.id, poNumber))
+    if (poNumber) {
+      void send(async () => {
+        const result = await providePurchaseOrder(run.id, poNumber)
+        if (isPostHogEnabled) posthog.capture('purchase_order_selected')
+        return result
+      })
+    }
   }
 
   return (
@@ -87,7 +94,13 @@ export function PoPicker({ run, onAnswered }: PoPickerProps) {
         <button
           type="button"
           className="button button-line"
-          onClick={() => void send(() => declinePurchaseOrder(run.id))}
+          onClick={() =>
+            void send(async () => {
+              const result = await declinePurchaseOrder(run.id)
+              if (isPostHogEnabled) posthog.capture('purchase_order_declined')
+              return result
+            })
+          }
         >
           There is no PO
         </button>
