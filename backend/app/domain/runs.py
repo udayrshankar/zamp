@@ -82,6 +82,9 @@ class PoDetectionOutput(LlmOutput):
 class LineItem(LlmOutput):
     description: str
     quantity: float | None
+    # The unit of measure printed for the quantity, such as kg or nos. Optional
+    # so runs saved before units were read still load.
+    unit: str | None = None
     unit_price: float | None
     # Optional so runs saved before discounts were read still load.
     discount_percent: float | None = None

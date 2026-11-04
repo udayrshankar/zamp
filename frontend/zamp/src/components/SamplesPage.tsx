@@ -80,12 +80,19 @@ export function SamplesPage({ uploading, onFiles }: SamplesPageProps) {
         </a>
       </header>
 
-      <ol className="steps">
+      <ol className="steps" aria-label="How to test">
         <li>
-          Press <strong>Check it</strong> to run an invoice, or download it and drop it on any page.
+          <strong>Run one</strong>
+          <span>Press Check it, or drop a downloaded PDF anywhere.</span>
         </li>
-        <li>Go through the accepted set first, in order, then the ones that should be caught.</li>
-        <li>Compare the result with the expected one shown here.</li>
+        <li>
+          <strong>Keep the order</strong>
+          <span>Accepted set first. Two problem invoices build on earlier ones.</span>
+        </li>
+        <li>
+          <strong>Compare</strong>
+          <span>Each row shows the result it should get.</span>
+        </li>
       </ol>
 
       {error && (

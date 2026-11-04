@@ -75,7 +75,10 @@ function LineItems({ run }: { run: Run }) {
           {invoice.line_items.map((item, index) => (
             <tr key={index}>
               <td>{item.description}</td>
-              <td className="number">{item.quantity ?? '—'}</td>
+              <td className="number">
+                {item.quantity ?? '—'}
+                {item.quantity !== null && item.unit ? ` ${item.unit}` : ''}
+              </td>
               <td className="number">{formatAmount(item.unit_price)}</td>
               <td className="number">{formatAmount(item.amount)}</td>
             </tr>

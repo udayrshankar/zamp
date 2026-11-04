@@ -222,5 +222,3 @@ The evaluation script runs the whole process against labelled invoices with the 
 - **Data privacy:** scanned pages are sent to NVIDIA's hosted API under its trial terms. Real invoices would call for a self-hosted model or an enterprise agreement, or `NVIDIA_KEY` left unset so only local OCR is used.
 - **Volume:** invoices are processed one at a time, because OCR is CPU-heavy. Higher volume would need a job queue with separate workers.
 - **Integrations:** invoices are uploaded by hand. The next step would be to pull them from an AP mailbox and send decisions to the accounting system.
-#   z a m p  
- 

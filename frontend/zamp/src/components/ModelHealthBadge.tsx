@@ -1,41 +1,68 @@
 import { useEffect, useState } from 'react'
-import { getHealth } from '../api/health'
-import type { Health } from '../api/health'
+import { checkModels, getHealth } from '../api/health'
+import type { ModelCheck, ModelStatus } from '../api/health'
 import { modelName } from '../format'
 
 const REFRESH_MS = 30_000
 
-/** "AI: 3 of 5 models up" in the header, with each model's state on hover. */
+const STATE_LABELS: Record<ModelStatus['state'], string> = {
+  ok: 'online',
+  failing: 'offline',
+  cooling_down: 'offline, skipped for now',
+  unknown: 'not checked yet',
+}
+
+function describe(model: ModelStatus): string {
+  const time = model.last_seconds !== null ? ` (${model.last_seconds.toFixed(1)} s)` : ''
+  const why = model.state !== 'ok' && model.last_error ? `: ${model.last_error}` : ''
+  return `${modelName(model.name)}: ${STATE_LABELS[model.state]}${time}${why}`
+}
+
+/**
+ * Checks every AI model when the page loads, then keeps the count fresh from
+ * what real invoices find. Only models that actually answered count as up.
+ */
 export function ModelHealthBadge() {
-  const [health, setHealth] = useState<Health | null>(null)
+  const [health, setHealth] = useState<ModelCheck | null>(null)
+  const [checking, setChecking] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    const load = () =>
+    checkModels()
+      .then((result) => !cancelled && setHealth(result))
+      .catch(() => undefined)
+      .finally(() => !cancelled && setChecking(false))
+    const timer = setInterval(() => {
       getHealth()
-        .then((next) => !cancelled && setHealth(next))
-        .catch(() => !cancelled && setHealth(null))
-    void load()
-    const timer = setInterval(load, REFRESH_MS)
+        .then((result) => !cancelled && setHealth(result))
+        .catch(() => undefined)
+    }, REFRESH_MS)
     return () => {
       cancelled = true
       clearInterval(timer)
     }
   }, [])
 
+  if (checking && !health) {
+    return (
+      <span className="model-health model-health-checking">
+        <span className="model-health-dot" aria-hidden="true" />
+        Checking AI models…
+      </span>
+    )
+  }
   if (!health || health.models.length === 0) return null
 
-  // A model nobody has called yet is presumed up until it fails.
-  const up = health.models.filter((model) => model.state !== 'cooling_down').length
-  const detail = health.models
-    .map((model) => `${modelName(model.name)}: ${model.state.replace('_', ' ')}`)
-    .join('\n')
+  const up = health.models.filter((model) => model.state === 'ok').length
   const level = up === 0 ? 'down' : up < health.panel_size ? 'degraded' : 'ok'
 
   return (
-    <span className={`model-health model-health-${level}`} title={detail}>
+    <span
+      className={`model-health model-health-${level}`}
+      title={health.models.map(describe).join('\n')}
+    >
       <span className="model-health-dot" aria-hidden="true" />
-      AI: {up} of {health.models.length} models up
+      AI: {up} of {health.models.length} models online
     </span>
   )
 }

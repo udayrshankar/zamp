@@ -29,7 +29,8 @@ invoice:
 - line_items: every row of the item table, one entry per row, in order. Never
   stop after the first row. amount is the row's total as printed. unit_price
   is the rate as printed; discount_percent is the row's discount, or null if
-  the row has none.
+  the row has none. unit is the unit of measure printed for the quantity, such
+  as kg, tonne, litre, metre or nos, or null if none is printed.
 - subtotal: the amount before tax and charges, as printed.
 - tax: a single tax line's amount. If tax is split across lines, such as CGST
   and SGST, use null here and list each one under charges. Also use null if
@@ -57,7 +58,8 @@ discrepancies: only line-level conflicts with line items listed in the PO.
   printed. Use null for both if the kind is item_not_on_po.
 Return an empty list if the PO lists no line items, or if the invoice lines agree
 with them. Billing fewer units than the PO allows, or only some of its lines,
-is partial billing and never a conflict. A month or period named on an invoice
+is partial billing and never a conflict. A quantity or price in another unit
+of measure, such as kg against tonnes, is never a conflict either. A month or period named on an invoice
 line is the same item as the PO line it belongs to. Never report totals,
 arithmetic, tax, or fields absent from the PO.
 """

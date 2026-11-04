@@ -21,6 +21,7 @@ Every vendor is fictional, and every GSTIN, PAN and bank account is a placeholde
 | `09-rotated-scan.pdf` | Scanned sideways, 90 degrees | Exact match | IITM/PUR/2026-27/0426 | Accept | - |
 | `10-two-page-digital.pdf` | Clear digital, 2 pages, 12 items | Long itemised invoice matches the PO | IITM/PUR/2026-27/0427 | Accept | - |
 | `11-split-bill-first-month.pdf` | Clear digital | First monthly bill on a six-month PO, so partial billing | IITM/PUR/2026-27/0424 | Accept | - |
+| `12-billed-in-kg-po-in-tonnes.pdf` | Clear digital PDF | Billed as 2,000 kg against a PO for 2 tonnes | IITM/PUR/2026-27/0435 | Accept | - |
 
 ## Incorrect
 

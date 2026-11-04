@@ -30,6 +30,7 @@ export interface CheckResult {
 export interface LineItem {
   description: string
   quantity: number | null
+  unit?: string | null
   unit_price: number | null
   discount_percent?: number | null
   amount: number | null

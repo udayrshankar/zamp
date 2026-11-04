@@ -1,6 +1,6 @@
 import type { Decision } from './api/runs'
 
-export const GITHUB_URL = 'https://github.com/udayrshankar/Zamp-Assignment'
+export const GITHUB_URL = 'https://github.com/udayrshankar/zamp'
 
 /** Built into the web image from backend/tests/fixtures/iitm. */
 export const SAMPLES_ZIP = '/samples/iitm-test-invoices.zip'
@@ -38,6 +38,7 @@ export const SAMPLE_GROUPS: SampleGroup[] = [
       { file: '09-rotated-scan.pdf', tests: 'Exact match', quality: 'Scanned sideways, 90°', expected: 'accept' },
       { file: '10-two-page-digital.pdf', tests: 'A 12-item, two-page invoice matches the PO', quality: 'Clear digital, 2 pages', expected: 'accept' },
       { file: '11-split-bill-first-month.pdf', tests: 'First monthly bill on a six-month PO', quality: 'Clear digital PDF', expected: 'accept' },
+      { file: '12-billed-in-kg-po-in-tonnes.pdf', tests: 'Billed as 2,000 kg against a PO for 2 tonnes', quality: 'Clear digital PDF', expected: 'accept' },
     ],
   },
   {

@@ -13,6 +13,7 @@ from app.infrastructure.mongo_repository import MongoDocumentRepository
 from app.infrastructure.llm_chain import FallbackLlmClient
 from app.infrastructure.llm_panel import ParallelLlmPanel
 from app.infrastructure.model_health import ModelHealth
+from app.infrastructure.model_probe import ModelProber
 from app.infrastructure.nvidia_llm import NvidiaLlmClient
 from app.infrastructure.purchase_order_repository import MongoPurchaseOrderRepository
 from app.infrastructure.run_repository import MongoRunRepository
@@ -34,6 +35,7 @@ class Container:
     shutdown: Callable[[], Awaitable[None]]
     run_orchestrator: RunOrchestrator | None = None
     model_health: ModelHealth | None = None
+    model_prober: ModelProber | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -94,6 +96,7 @@ def build_container(settings: Settings) -> Container:
         purchase_order_service=purchase_order_service,
         run_orchestrator=orchestrator,
         model_health=health,
+        model_prober=ModelProber(models, health),
         startup=startup,
         shutdown=shutdown,
     )
@@ -110,6 +113,11 @@ def get_purchase_order_service(request: Request) -> PurchaseOrderService:
 def get_model_health(request: Request) -> ModelHealth | None:
     container = getattr(request.app.state, "container", None)
     return container.model_health if container else None
+
+
+def get_model_prober(request: Request) -> ModelProber | None:
+    container = getattr(request.app.state, "container", None)
+    return container.model_prober if container else None
 
 
 def get_run_orchestrator(request: Request) -> RunOrchestrator:

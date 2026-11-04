@@ -32,7 +32,11 @@ class ModelAnswer(Generic[T]):
 
 class ModelState(StrEnum):
     OK = "ok"
+    # Its last call failed, but not often enough yet to be skipped.
+    FAILING = "failing"
+    # Failed repeatedly, so it is skipped until its cooldown ends.
     COOLING_DOWN = "cooling_down"
+    # Not called since the server started.
     UNKNOWN = "unknown"
 
 

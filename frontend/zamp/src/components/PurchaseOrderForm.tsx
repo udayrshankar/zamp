@@ -6,7 +6,11 @@ import {
   updatePurchaseOrder,
 } from '../api/purchaseOrders'
 import type { PurchaseOrder, PurchaseOrderFields } from '../api/purchaseOrders'
+import { DEFAULT_LINES_KEY, emptyLine, findLineItems, toLineFields } from '../lineItems'
+import type { LineRow } from '../lineItems'
 import { ConfirmButton } from './ConfirmButton'
+import { Icon } from './Icon'
+import { LineItemsEditor } from './LineItemsEditor'
 
 interface PurchaseOrderFormProps {
   order: PurchaseOrder | null
@@ -21,8 +25,10 @@ interface FieldRow {
 
 const EMPTY_ROW: FieldRow = { name: '', value: '' }
 
-function toRows(fields: PurchaseOrderFields): FieldRow[] {
-  return Object.entries(fields).map(([name, value]) => ({
+function toRows(fields: PurchaseOrderFields, linesKey: string): FieldRow[] {
+  return Object.entries(fields)
+    .filter(([name]) => name !== linesKey)
+    .map(([name, value]) => ({
     name,
     value: typeof value === 'string' ? value : JSON.stringify(value),
   }))
@@ -37,18 +43,27 @@ function parseValue(value: string): unknown {
   }
 }
 
-function toFields(rows: FieldRow[]): PurchaseOrderFields {
+function toFields(rows: FieldRow[], lines: LineRow[], linesKey: string): PurchaseOrderFields {
   const named = rows.filter((row) => row.name.trim())
   const names = named.map((row) => row.name.trim())
   if (new Set(names).size !== names.length) {
     throw new Error('Each field name can only be used once.')
   }
-  return Object.fromEntries(named.map((row) => [row.name.trim(), parseValue(row.value)]))
+  if (names.includes(linesKey)) {
+    throw new Error(`"${linesKey}" holds the line items, so pick another field name.`)
+  }
+  const fields = Object.fromEntries(named.map((row) => [row.name.trim(), parseValue(row.value)]))
+  const lineFields = toLineFields(lines)
+  return lineFields.length > 0 ? { ...fields, [linesKey]: lineFields } : fields
 }
 
 export function PurchaseOrderForm({ order, onSaved, onDeleted }: PurchaseOrderFormProps) {
   const [poNumber, setPoNumber] = useState(order?.po_number ?? '')
-  const [rows, setRows] = useState<FieldRow[]>(() => toRows(order?.fields ?? {}))
+  const [found] = useState(() => findLineItems(order?.fields ?? {}))
+  const linesKey = found?.key ?? DEFAULT_LINES_KEY
+  const [rows, setRows] = useState<FieldRow[]>(() => toRows(order?.fields ?? {}, linesKey))
+  // A new PO starts with one empty line to fill in; blank lines aren't saved.
+  const [lines, setLines] = useState<LineRow[]>(() => found?.rows ?? (order ? [] : [emptyLine()]))
   const [error, setError] = useState<string | null>(null)
 
   const updateRow = (index: number, change: Partial<FieldRow>) => {
@@ -67,7 +82,7 @@ export function PurchaseOrderForm({ order, onSaved, onDeleted }: PurchaseOrderFo
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     void run(async () => {
-      const data = { po_number: poNumber, fields: toFields(rows) }
+      const data = { po_number: poNumber, fields: toFields(rows, lines, linesKey) }
       onSaved(
         await (order ? updatePurchaseOrder(order.id, data) : createPurchaseOrder(data)),
       )
@@ -100,7 +115,7 @@ export function PurchaseOrderForm({ order, onSaved, onDeleted }: PurchaseOrderFo
       <div className="po-fields">
         <h2>Details</h2>
         <p className="hint">
-          Add what this PO needs, like vendor, total or handling charges.
+          Add what this PO needs, like vendor, total, currency or handling charges.
         </p>
         {rows.map((row, index) => (
           <div className="po-row" key={index}>
@@ -127,16 +142,19 @@ export function PurchaseOrderForm({ order, onSaved, onDeleted }: PurchaseOrderFo
             </button>
           </div>
         ))}
-      </div>
-
-      <div className="actions">
         <button
           type="button"
-          className="button button-line"
+          className="button button-line button-small po-add"
           onClick={() => setRows([...rows, EMPTY_ROW])}
         >
+          <Icon name="plus" />
           Add field
         </button>
+      </div>
+
+      <LineItemsEditor lines={lines} onChange={setLines} />
+
+      <div className="actions">
         <button type="submit" className="button button-solid">
           {order ? 'Save changes' : 'Add purchase order'}
         </button>

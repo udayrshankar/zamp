@@ -52,6 +52,7 @@ class Item:
     hsn: str
     quantity: int
     rate: float
+    unit: str | None = None
 
     @property
     def amount(self) -> float:
@@ -99,6 +100,7 @@ class Order:
                         "description": item.description,
                         "hsn": item.hsn,
                         "qty": item.quantity,
+                        **({"unit": item.unit} if item.unit else {}),
                         "unit_price": item.rate,
                         "amount": item.amount,
                     }
@@ -212,7 +214,7 @@ def draw_table(page, items: list[Item], y: float, start: int, font: str, bold: s
         page.insert_text((46, y), str(index), fontname=font, fontsize=9.5)
         page.insert_text((76, y), item.description, fontname=font, fontsize=9.5)
         page.insert_text((320, y), item.hsn, fontname=font, fontsize=9.5)
-        right(page, 408, y, str(item.quantity), font)
+        right(page, 408, y, f"{item.quantity} {item.unit}" if item.unit else str(item.quantity), font)
         right(page, 478, y, money(item.rate), font)
         right(page, 549, y, money(item.amount), font)
         page.draw_line((42, y + 6), (553, y + 6), color=(0.8, 0.8, 0.8), width=0.4)
@@ -504,6 +506,9 @@ O_PROJECTORS = order("0432", NOVA, "Office of Academic Courses", "AC/IND/2026/01
 O_BENCHES = order("0433", ADYAR, "Department of Physics", "PH/IND/2026/073", [
     Item("Anti Vibration Lab Bench", "94032090", 4, 96000),
 ])
+O_STEEL = order("0435", PORT, "Estate Office", "EO/IND/2026/191", [
+    Item("TMT Steel Rod, 12 mm, Fe 500", "72142090", 2, 62000, unit="MT"),
+])
 O_SPECTRO = order("0434", IMPORT, "Department of Physics", "PH/IND/2026/081", [
     Item("UV-Vis Spectrophotometer", "90273010", 1, 465000),
     Item("Quartz Cuvette Set", "70179090", 4, 6800),
@@ -518,7 +523,7 @@ O_SPECTRO = order("0434", IMPORT, "Department of Physics", "PH/IND/2026/081", [
 ORDERS = [
     O_SCOPES, O_REAGENTS, O_CHAIRS, O_WORKSTATIONS, O_UPS, O_PRINT, O_CABLE, O_SERVICE, O_GLASS,
     O_SWITCHES, O_MICROSCOPE, O_FURNITURE, O_LOCKERS, O_COLUMNS, O_CAMERA, O_PROJECTORS, O_BENCHES,
-    O_SPECTRO,
+    O_SPECTRO, O_STEEL,
 ]
 
 SCOPES_INVOICE = Invoice(O_SCOPES, "KSI/26-27/0893", "09 Oct 2026", f"PO No: {O_SCOPES.number}")
@@ -573,6 +578,10 @@ SAMPLES = [
            digital),
     Sample("correct", "11-split-bill-first-month", "Clear digital", "First monthly bill on a six-month PO, so partial billing", O_SERVICE.number, "Accept",
            Invoice(O_SERVICE, "TFS/OCT/1021", "31 Oct 2026", f"PO No: {O_SERVICE.number}", items=first_month("", "October")),
+           digital),
+    Sample("correct", "12-billed-in-kg-po-in-tonnes", "Clear digital PDF", "Billed as 2,000 kg against a PO for 2 tonnes", O_STEEL.number, "Accept",
+           Invoice(O_STEEL, "EIT/26-27/0457", "21 Oct 2026", f"PO No: {O_STEEL.number}",
+                   items=[Item("TMT Steel Rod, 12 mm, Fe 500", "72142090", 2000, 62, unit="kg")]),
            digital),
     Sample("incorrect", "01-clear-digital-overbilled", "Clear digital PDF", "About 15% over the PO", O_FURNITURE.number, "Reject",
            Invoice(O_FURNITURE, "NFW/5567", "10 Oct 2026", f"PO No: {O_FURNITURE.number}",

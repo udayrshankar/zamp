@@ -4,12 +4,16 @@ A wrong line can hide inside a total that still fits the PO, so every line is
 checked on its own: its arithmetic, which PO line it is, and whether it bills
 more, or at a higher price, than that PO line allows. All of it is computed
 here; what the LLM says about discrepancies is never trusted to decide.
+
+Quantities and prices are compared in the PO line's unit of measure, so 2,000
+kg billed against 2 tonnes ordered is the same amount.
 """
 
 import re
 from dataclasses import dataclass
 
 from app.domain.runs import Decision, LineItem, Run
+from app.workflow import units
 from app.workflow.checks.base import (
     CheckContext,
     CheckResult,
@@ -65,7 +69,7 @@ _FILLER = {
     "november",
     "december",
     "contd",
-}
+} | units.UNIT_WORDS
 # Words that announce a different product standing in for the one ordered.
 _SUBSTITUTES = {
     "equivalent",
@@ -79,6 +83,7 @@ _SUBSTITUTES = {
 _QUANTITY_KEYS = ("qty", "quantity", "qnty", "units")
 _PRICE_KEYS = ("unit_price", "unit_rate", "price", "rate")
 _DESCRIPTION_KEYS = ("description", "item", "name", "product", "particulars")
+_UNIT_KEYS = ("unit", "uom", "unit_of_measure", "units_of_measure", "measure", "units")
 # The share of a PO line's words an invoice line must repeat to be the same item.
 _COVERAGE = 0.6
 # Rounding allowed between quantity x rate and the printed amount.
@@ -91,6 +96,15 @@ class PoLine:
     description: str
     quantity: float | None
     unit_price: float | None
+    unit: units.Unit | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _InPoUnits:
+    """An invoice line's quantity and net unit price, in its PO line's unit."""
+
+    quantity: float | None
+    price: float | None
 
 
 class LineArithmeticCheck:
@@ -131,30 +145,55 @@ class PoLineCheck:
                 problems.append(f"Not on the PO: {line.description}.")
                 continue
             po_line = po_lines[index]
-            if line.quantity is not None:
-                billed[index] = billed.get(index, 0) + line.quantity
-            price = _net_unit_price(line)
+            converted = in_po_units(line, po_line)
+            if isinstance(converted, str):
+                problems.append(converted)
+                continue
+            if converted.quantity is not None:
+                billed[index] = billed.get(index, 0) + converted.quantity
             if (
-                price is not None
+                converted.price is not None
                 and po_line.unit_price
-                and price > po_line.unit_price * (1 + _PRICE_TOLERANCE)
+                and converted.price > po_line.unit_price * (1 + _PRICE_TOLERANCE)
             ):
+                per = po_line.unit.label if po_line.unit else "unit"
                 problems.append(
-                    f"{line.description} is billed at {price:,.2f} a unit; "
+                    f"{line.description} is billed at {converted.price:,.2f} a {per}; "
                     f"the PO price is {po_line.unit_price:,.2f}."
                 )
 
         for index, quantity in billed.items():
-            ordered = po_lines[index].quantity
-            if ordered is not None and quantity > ordered + 1e-9:
+            po_line = po_lines[index]
+            if po_line.quantity is not None and quantity > po_line.quantity + 1e-9:
+                unit = f" {po_line.unit.label}" if po_line.unit else ""
                 problems.append(
-                    f"{po_lines[index].description}: {quantity:g} billed in total, "
-                    f"but the PO orders {ordered:g}."
+                    f"{po_line.description}: {quantity:g}{unit} billed in total, "
+                    f"but the PO orders {po_line.quantity:g}{unit}."
                 )
 
         if problems:
             return review(self, " ".join(problems))
         return passed(self, "Every line is on the PO, within the quantity and price ordered.")
+
+
+def in_po_units(line: LineItem, po_line: PoLine) -> _InPoUnits | str:
+    """The line's quantity and price in the PO line's unit, or why they can't be
+    compared. A line or PO line that names no unit is taken to use the other's."""
+    quantity, price = line.quantity, _net_unit_price(line)
+    billed_in = units.parse(line.unit) or units.in_text(line.description)
+    ordered_in = po_line.unit
+    if billed_in is None or ordered_in is None:
+        return _InPoUnits(quantity, price)
+    factor = units.ratio(billed_in, ordered_in)
+    if factor is None:
+        return (
+            f"{line.description} is billed in {billed_in.label}, but the PO orders it in "
+            f"{ordered_in.label}, which doesn't convert."
+        )
+    return _InPoUnits(
+        None if quantity is None else quantity * factor,
+        None if price is None else price / factor,
+    )
 
 
 def po_lines_of(fields: dict) -> list[PoLine]:
@@ -165,6 +204,7 @@ def po_lines_of(fields: dict) -> list[PoLine]:
             description=_first_text(row),
             quantity=_first_number(row, _QUANTITY_KEYS),
             unit_price=_first_number(row, _PRICE_KEYS),
+            unit=_first_unit(row),
         )
         for row in rows
         if isinstance(row, dict)
@@ -193,8 +233,11 @@ def _earlier_quantities(context: CheckContext, po_lines: list[PoLine]) -> dict[i
             continue
         for line in run.verification.invoice.line_items:
             index = match_line(line.description, po_lines)
-            if index is not None and line.quantity is not None:
-                billed[index] = billed.get(index, 0) + line.quantity
+            if index is None:
+                continue
+            converted = in_po_units(line, po_lines[index])
+            if not isinstance(converted, str) and converted.quantity is not None:
+                billed[index] = billed.get(index, 0) + converted.quantity
     return billed
 
 
@@ -269,3 +312,13 @@ def _first_number(row: dict, keys: tuple[str, ...]) -> float | None:
         if isinstance(value, int | float) and not isinstance(value, bool):
             return float(value)
     return None
+
+
+def _first_unit(row: dict) -> units.Unit | None:
+    """The PO line's unit: a text field such as "unit" or "uom", or else one the
+    description names, like "Copper cable (metre)"."""
+    for key in _UNIT_KEYS:
+        for name, value in row.items():
+            if name.strip().casefold() == key and isinstance(value, str):
+                return units.parse(value)
+    return units.in_text(_first_text(row))

@@ -32,9 +32,11 @@ class ModelHealth:
         self._clock = clock
 
     def preferred(self) -> list[str]:
-        """Healthy models in configured order. If every model is cooling down,
-        all of them, because trying is better than giving up."""
+        """Healthy models in configured order, with any whose last call failed
+        moved to the back. If every model is cooling down, all of them, because
+        trying is better than giving up."""
         healthy = [model for model in self._order if self._is_healthy(model)]
+        healthy.sort(key=lambda model: self._records[model].failures_in_a_row > 0)
         return healthy or list(self._order)
 
     def record_success(self, model: str, seconds: float) -> None:
@@ -54,6 +56,13 @@ class ModelHealth:
         if record.failures_in_a_row >= self._failures_to_trip:
             record.cooling_until = self._clock() + self._cooldown_seconds
 
+    def cool_down(self, model: str) -> None:
+        """Skips a model now, without waiting for a second failure. Used when a
+        model can't even answer a tiny check, so no invoice waits on it."""
+        record = self._records[model]
+        record.failures_in_a_row = max(record.failures_in_a_row, self._failures_to_trip)
+        record.cooling_until = self._clock() + self._cooldown_seconds
+
     def status(self) -> list[ModelStatus]:
         return [self._status_of(model) for model in self._order]
 
@@ -67,7 +76,7 @@ class ModelHealth:
         elif self._is_healthy(model) and record.failures_in_a_row == 0:
             state = ModelState.OK
         elif self._is_healthy(model):
-            state = ModelState.UNKNOWN
+            state = ModelState.FAILING
         else:
             state = ModelState.COOLING_DOWN
         return ModelStatus(

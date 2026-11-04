@@ -1,5 +1,7 @@
 """The model chain and panel: graceful degradation from three models to none."""
 
+import asyncio
+
 import pytest
 from pydantic import BaseModel
 
@@ -8,6 +10,7 @@ from app.domain.llm import AnswerStatus, ModelState
 from app.infrastructure.llm_chain import FallbackLlmClient
 from app.infrastructure.llm_panel import ParallelLlmPanel
 from app.infrastructure.model_health import ModelHealth
+from app.infrastructure.model_probe import ModelProber
 
 
 class Answer(BaseModel):
@@ -51,12 +54,13 @@ class TestModelHealth:
         health = ModelHealth(["a", "b"], cooldown_seconds=60, clock=clock)
 
         health.record_failure("a", 1.0, "timed out")
-        assert health.preferred() == ["a", "b"]
+        assert health.preferred() == ["b", "a"]
         health.record_failure("a", 1.0, "timed out")
         assert health.preferred() == ["b"]
 
         clock.now = 61
-        assert health.preferred() == ["a", "b"]
+        # Back in use, but behind healthy models until it answers again.
+        assert health.preferred() == ["b", "a"]
 
     def test_a_success_resets_the_count(self):
         health = ModelHealth(["a"])
@@ -90,7 +94,9 @@ class TestFallbackChain:
     async def test_the_first_healthy_model_answers(self):
         clients = models(("a", False), ("b", False))
 
-        answer = await FallbackLlmClient(clients, health_for(clients)).complete_json("s", "u", Answer)
+        chain = FallbackLlmClient(clients, health_for(clients))
+
+        answer = await chain.complete_json("s", "u", Answer)
 
         assert answer.text == "a"
         assert clients[1].calls == 0
@@ -98,18 +104,20 @@ class TestFallbackChain:
     async def test_a_failing_model_hands_over_to_the_next(self):
         clients = models(("down", True), ("up", False))
 
-        answer = await FallbackLlmClient(clients, health_for(clients)).complete_json("s", "u", Answer)
+        chain = FallbackLlmClient(clients, health_for(clients))
+
+        answer = await chain.complete_json("s", "u", Answer)
 
         assert answer.text == "up"
 
-    async def test_a_model_that_keeps_failing_is_skipped_on_later_calls(self):
+    async def test_a_model_that_failed_is_not_tried_first_again(self):
         clients = models(("down", True), ("up", False))
         chain = FallbackLlmClient(clients, health_for(clients))
 
         for _ in range(3):
             await chain.complete_json("s", "u", Answer)
 
-        assert clients[0].calls == 2
+        assert clients[0].calls == 1
 
     async def test_every_model_failing_raises_one_error_naming_them(self):
         clients = models(("a", True), ("b", True))
@@ -155,9 +163,74 @@ class TestPanel:
                 return await super().complete_json(system, user, output)
 
         clients = [SlowFailure("a", False), SlowFailure("b", True), ScriptedModel("c")]
-        panel = ParallelLlmPanel(clients, health_for(clients), size=2, deadline_seconds=45, clock=clock)
+        panel = ParallelLlmPanel(
+            clients, health_for(clients), size=2, deadline_seconds=45, clock=clock
+        )
 
         answers = await panel.ask_all("s", "u", Answer)
 
         assert [a.model for a in answers] == ["a", "b"]
         assert clients[2].calls == 0
+
+
+class TestProber:
+    async def test_checks_every_model_and_reports_each_state(self):
+        clients = models(("up", False), ("down", True))
+        health = health_for(clients)
+
+        statuses = await ModelProber(clients, health).check()
+
+        states = {status.name: status.state for status in statuses}
+        assert states == {"up": ModelState.OK, "down": ModelState.COOLING_DOWN}
+        assert all(client.calls == 1 for client in clients)
+
+    async def test_a_model_that_fails_the_check_is_skipped_by_the_next_invoice(self):
+        clients = models(("up", False), ("down", True))
+        health = health_for(clients)
+
+        await ModelProber(clients, health).check()
+
+        assert health.preferred() == ["up"]
+
+    async def test_a_model_that_answers_a_later_check_is_back_in_use(self):
+        clock = Clock()
+        clients = models(("a", True))
+        health = health_for(clients, clock)
+        prober = ModelProber(clients, health, min_interval_seconds=60, clock=clock)
+        await prober.check()
+
+        clients[0].fails = False
+        clock.now = 61
+        [status] = await prober.check()
+
+        assert status.state is ModelState.OK
+
+    async def test_a_model_that_hangs_is_reported_after_the_timeout(self):
+        class Hanging(ScriptedModel):
+            async def complete_json(self, system, user, output):
+                await asyncio.sleep(5)
+
+        clients = [Hanging("slow")]
+
+        [status] = await ModelProber(clients, health_for(clients), timeout_seconds=0.05).check()
+
+        assert status.state is ModelState.COOLING_DOWN
+        assert "No answer within" in status.last_error
+
+    async def test_checks_close_together_reuse_the_last_result(self):
+        clock = Clock()
+        clients = models(("a", False))
+        prober = ModelProber(clients, health_for(clients), min_interval_seconds=60, clock=clock)
+
+        await prober.check()
+        await prober.check()
+        clock.now = 61
+        await prober.check()
+
+        assert clients[0].calls == 2
+
+    def test_a_model_whose_last_call_failed_is_tried_after_the_healthy_ones(self):
+        health = ModelHealth(["a", "b", "c"])
+        health.record_failure("a", 1.0, "timed out")
+
+        assert health.preferred() == ["b", "c", "a"]

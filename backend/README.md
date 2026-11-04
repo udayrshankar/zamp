@@ -97,10 +97,12 @@ Only `po_number` is required, and it must be unique. Everything else goes in `fi
   "fields": {
     "vendor": "Northwind Office Supplies",
     "handling_charges": 25.5,
-    "line_items": [{ "description": "Chair", "qty": 2, "unit_price": 250.0 }]
+    "line_items": [{ "description": "Chair", "qty": 2, "unit": "nos", "unit_price": 250.0 }]
   }
 }
 ```
+
+Line items are checked line by line when the PO has a list of rows. The PO form writes them with the keys above. A row's `unit` (or `uom`) is optional. When both the invoice line and the PO line name a unit, quantities and prices are converted before they're compared: mass (g, kg, quintal, tonne, lb), volume (ml, litre, kl), length (mm, cm, metre, km, ft) and count (nos, pair, dozen). "Ton" and "MT" mean the metric tonne. Units that don't convert, such as kg against litres, send the invoice to review. When either side gives no unit, both are taken to be in the same unit.
 
 `PUT` replaces the whole PO, so a field left out of the request is removed. Field names can't be blank, contain `.`, or start with `$`. A PO number already in use returns 409.
 
