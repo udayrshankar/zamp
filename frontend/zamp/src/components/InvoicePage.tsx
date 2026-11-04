@@ -5,6 +5,7 @@ import type { Decision, Run, StageName } from '../api/runs'
 import { navigate } from '../hooks/useHashRoute'
 import { useRun } from '../hooks/useRuns'
 import { runSentence } from '../runSentence'
+import posthog, { isPostHogEnabled } from '../posthog'
 import { ConfirmButton } from './ConfirmButton'
 import { Icon } from './Icon'
 import { PoPicker } from './PoPicker'
@@ -60,6 +61,7 @@ export function InvoicePage({ id }: { id: string }) {
     setDeleteError(null)
     try {
       await deleteRun(run.id)
+      if (isPostHogEnabled) posthog.capture('invoice_deleted')
       navigate('/')
     } catch (cause) {
       setDeleteError(cause instanceof Error ? cause.message : 'This upload could not be deleted.')

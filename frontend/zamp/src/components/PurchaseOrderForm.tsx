@@ -8,6 +8,7 @@ import {
 import type { PurchaseOrder, PurchaseOrderFields } from '../api/purchaseOrders'
 import { DEFAULT_LINES_KEY, emptyLine, findLineItems, toLineFields } from '../lineItems'
 import type { LineRow } from '../lineItems'
+import posthog, { isPostHogEnabled } from '../posthog'
 import { ConfirmButton } from './ConfirmButton'
 import { Icon } from './Icon'
 import { LineItemsEditor } from './LineItemsEditor'
@@ -83,9 +84,16 @@ export function PurchaseOrderForm({ order, onSaved, onDeleted }: PurchaseOrderFo
     event.preventDefault()
     void run(async () => {
       const data = { po_number: poNumber, fields: toFields(rows, lines, linesKey) }
-      onSaved(
-        await (order ? updatePurchaseOrder(order.id, data) : createPurchaseOrder(data)),
-      )
+      const savedOrder = await (order
+        ? updatePurchaseOrder(order.id, data)
+        : createPurchaseOrder(data))
+      if (isPostHogEnabled) {
+        posthog.capture(order ? 'purchase_order_updated' : 'purchase_order_created', {
+          custom_field_count: rows.filter((row) => row.name.trim()).length,
+          line_item_count: lines.filter((line) => line.description.trim()).length,
+        })
+      }
+      onSaved(savedOrder)
     })
   }
 
@@ -93,6 +101,7 @@ export function PurchaseOrderForm({ order, onSaved, onDeleted }: PurchaseOrderFo
     if (!order) return
     void run(async () => {
       await deletePurchaseOrder(order.id)
+      if (isPostHogEnabled) posthog.capture('purchase_order_deleted')
       onDeleted()
     })
   }
