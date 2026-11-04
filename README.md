@@ -14,7 +14,7 @@ Built for the AI Solutions Analyst case study, problem statement PS-1 (Finance /
 2. Press **Check it** next to any invoice. You can also download one, or [all of them as a zip](http://13.204.36.209/samples/iitm-test-invoices.zip), and drop it on the page.
 3. Watch each stage run live, then compare the decision with the expected result on the Test invoices page.
 
-The 22 test invoices are billed to IIT Madras, and their purchase orders are already loaded. Half should be accepted; the other half each hide a problem the process should catch. Run the accepted set first, in order, because two of the problem cases build on earlier invoices.
+The 23 test invoices are billed to IIT Madras, and their purchase orders are already loaded. Twelve should be accepted; the other eleven each hide a problem the process should catch. Run the accepted set first, in order, because two of the problem cases build on earlier invoices.
 
 ---
 
@@ -50,7 +50,7 @@ flowchart LR
 | **2. Find the PO** | An LLM suggests PO references along with the line each came from. Code confirms each one really appears in the text, then looks it up, ignoring case and punctuation. |
 | **3. Ask a person** | If there's no match, several matches or an error, the run pauses and asks which PO it is. A paused run survives a server restart. |
 | **4. Compare** | The LLM reports what the invoice and the PO each say, naming the PO field each value came from, so POs can use any field names. |
-| **5. Rule checks** | Plain code checks the arithmetic, duplicates, vendor, currency, required fields, reading quality and the amount against the PO, including earlier invoices billed to it. |
+| **5. Rule checks** | Plain code checks the arithmetic, duplicates, vendor, currency, required fields, reading quality and the amount against the PO, including earlier invoices billed to it. Line quantities and prices are converted to the PO's unit of measure first, so kg can be checked against tonnes. |
 | **6. Decide** | The strictest check wins, and the decision lists which checks passed or failed and why. |
 
 ### Decisions
@@ -86,6 +86,7 @@ Each one is a test invoice you can run from the **Test invoices** page.
 | PO quoted only indirectly, without its usual prefix | Matched and **accepted** |
 | Freight and CGST/SGST shown as separate lines | Added up correctly and **accepted** |
 | First monthly bill on a six-month PO | **Accepted** as partial billing |
+| Billed as 2,000 kg against a PO for 2 tonnes | Converted and **accepted** |
 | A later bill that takes that PO over its limit | **Rejected** |
 | A re-sent copy of an accepted invoice, as a fax (different file, same invoice) | **Rejected** as a duplicate |
 | A real PO quoted by a different company | **Rejected**, wrong vendor |
@@ -221,3 +222,5 @@ The evaluation script runs the whole process against labelled invoices with the 
 - **Data privacy:** scanned pages are sent to NVIDIA's hosted API under its trial terms. Real invoices would call for a self-hosted model or an enterprise agreement, or `NVIDIA_KEY` left unset so only local OCR is used.
 - **Volume:** invoices are processed one at a time, because OCR is CPU-heavy. Higher volume would need a job queue with separate workers.
 - **Integrations:** invoices are uploaded by hand. The next step would be to pull them from an AP mailbox and send decisions to the accounting system.
+#   z a m p  
+ 
